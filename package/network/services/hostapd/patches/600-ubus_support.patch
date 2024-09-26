@@ -683,7 +683,7 @@ probe/assoc/auth requests via object subscribe.
  			break;
 --- a/wpa_supplicant/wpa_supplicant.c
 +++ b/wpa_supplicant/wpa_supplicant.c
-@@ -7920,6 +7920,8 @@ struct wpa_supplicant * wpa_supplicant_a
+@@ -7938,6 +7938,8 @@ struct wpa_supplicant * wpa_supplicant_a
  	}
  #endif /* CONFIG_P2P */
  
@@ -692,7 +692,7 @@ probe/assoc/auth requests via object subscribe.
  	return wpa_s;
  }
  
-@@ -7946,6 +7948,8 @@ int wpa_supplicant_remove_iface(struct w
+@@ -7964,6 +7966,8 @@ int wpa_supplicant_remove_iface(struct w
  	struct wpa_supplicant *parent = wpa_s->parent;
  #endif /* CONFIG_MESH */
  
@@ -701,7 +701,7 @@ probe/assoc/auth requests via object subscribe.
  	/* Remove interface from the global list of interfaces */
  	prev = global->ifaces;
  	if (prev == wpa_s) {
-@@ -8292,8 +8296,12 @@ int wpa_supplicant_run(struct wpa_global
+@@ -8310,8 +8314,12 @@ int wpa_supplicant_run(struct wpa_global
  	eloop_register_signal_terminate(wpa_supplicant_terminate, global);
  	eloop_register_signal_reconfig(wpa_supplicant_reconfig, global);
  
