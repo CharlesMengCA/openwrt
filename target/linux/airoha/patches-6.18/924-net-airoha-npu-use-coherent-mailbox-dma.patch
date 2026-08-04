@@ -1,0 +1,56 @@
+From: Daniel Pawlik <pawlik.dan@gmail.com>
+Subject: [PATCH] net: airoha: npu: use coherent DMA for mailbox buffers
+
+Commit 6f884eb87a79 ("net: airoha: Fix DMA direction for NPU mailbox
+buffer") switched airoha_npu_send_msg() from DMA_TO_DEVICE to
+DMA_BIDIRECTIONAL so non-coherent EN7581 CPUs invalidate cache before
+reading NPU GET responses.
+
+On EN7581 + MT7996 (eagle) that change regresses probe: mailbox DONE
+succeeds but WLAN_FUNC_GET_WAIT_NPU_VERSION still reads as 0.0, so
+mt76 never binds NPU offload. Likely DONE vs DRAM visibility after the
+extra invalidate, or mixed coherency on the mailbox path.
+
+Avoid streaming-DMA direction issues entirely for these small messages:
+copy through a dma_alloc_coherent() buffer for the mailbox transaction,
+then copy the response back to the caller's buffer. That matches how
+many drivers handle tiny command/response mailboxes and restores a
+stable 0.1111 version read with or without 6f884eb.
+
+Fixes: 6f884eb87a79 ("net: airoha: Fix DMA direction for NPU mailbox buffer")
+Signed-off-by: Daniel Pawlik <pawlik.dan@gmail.com>
+---
+--- a/drivers/net/ethernet/airoha/airoha_npu.c
++++ b/drivers/net/ethernet/airoha/airoha_npu.c
+@@ -166,12 +166,16 @@ static int airoha_npu_send_msg(struct ai
+ 	u16 core = 0; /* FIXME */
+ 	u32 val, offset = core << 4;
+ 	dma_addr_t dma_addr;
++	void *dma_buf;
+ 	int ret;
+ 
+-	dma_addr = dma_map_single(npu->dev, p, size, DMA_BIDIRECTIONAL);
+-	ret = dma_mapping_error(npu->dev, dma_addr);
+-	if (ret)
+-		return ret;
++	/* Small cmd/rsp mailbox: coherent buffer avoids TO_DEVICE vs
++	 * BIDIRECTIONAL cache pitfalls on EN7581 (see 6f884eb87a79).
++	 */
++	dma_buf = dma_alloc_coherent(npu->dev, size, &dma_addr, GFP_ATOMIC);
++	if (!dma_buf)
++		return -ENOMEM;
++	memcpy(dma_buf, p, size);
+ 
+ 	spin_lock_bh(&npu->cores[core].lock);
+ 
+@@ -191,7 +195,9 @@ static int airoha_npu_send_msg(struct ai
+ 
+ 	spin_unlock_bh(&npu->cores[core].lock);
+ 
+-	dma_unmap_single(npu->dev, dma_addr, size, DMA_BIDIRECTIONAL);
++	if (!ret)
++		memcpy(p, dma_buf, size);
++	dma_free_coherent(npu->dev, size, dma_buf, dma_addr);
+ 
+ 	return ret;
+ }
